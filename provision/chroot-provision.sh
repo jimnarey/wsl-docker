@@ -36,9 +36,34 @@ apt-get install -y --no-install-recommends docker-ce docker-ce-cli containerd.io
 #### Install NVIDIA Container Toolkit (follow NVIDIA official guide)
 echo "Adding NVIDIA package repositories and GPG key (official method)"
 curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | apt-key add -
-DISTRO=$(. /etc/os-release; echo "$ID$VERSION_ID")
-echo "Detected distro: $DISTRO"
-curl -fsSL https://nvidia.github.io/libnvidia-container/$DISTRO/nvidia-container-toolkit.list | tee /etc/apt/sources.list.d/nvidia-container-toolkit.list
+
+# Determine distro and try a few fallbacks if the exact distro isn't available
+OS_ID=$(. /etc/os-release; echo "$ID")
+VER=$(. /etc/os-release; echo "$VERSION_ID")
+echo "Detected OS: $OS_ID $VER"
+
+declare -a CANDIDATES
+CANDIDATES+=("${OS_ID}${VER}")
+# Common fallbacks for newer Ubuntu releases that may not yet be published
+if [ "${OS_ID}" = "ubuntu" ]; then
+  CANDIDATES+=("ubuntu22.04" "ubuntu20.04" "ubuntu18.04")
+fi
+
+FOUND=0
+for D in "${CANDIDATES[@]}"; do
+  URL="https://nvidia.github.io/libnvidia-container/${D}/nvidia-container-toolkit.list"
+  echo "Trying NVIDIA repo list: $URL"
+  if curl -fsSL "$URL" -o "/etc/apt/sources.list.d/nvidia-container-toolkit.list"; then
+    echo "Using NVIDIA repo list for: $D"
+    FOUND=1
+    break
+  fi
+done
+
+if [ "$FOUND" -ne 1 ]; then
+  echo "Failed to find a suitable NVIDIA container toolkit repo for ${OS_ID} ${VER}" >&2
+  exit 1
+fi
 
 apt-get update
 echo "Installing nvidia-container-toolkit (official package)..."

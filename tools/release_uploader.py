@@ -9,7 +9,7 @@ Deletes any existing asset named `ubuntu-noble-amd64.tar.gz` and uploads
 from pathlib import Path
 import os
 import sys
-from github import Github
+import github
 
 
 REPO_ENV = "GITHUB_REPOSITORY"
@@ -30,10 +30,9 @@ def main() -> int:
         print(f"Asset not found: {ASSET_PATH}", file=sys.stderr)
         return 3
 
-    gh = Github(token)
+    gh = github.Github(auth=github.Auth.Token(token))
     repo = gh.get_repo(repo_name)
 
-    # Find release by tag; create only if missing
     release = None
     for r in repo.get_releases():
         if r.tag_name == TAG:
@@ -43,7 +42,6 @@ def main() -> int:
     if release is None:
         release = repo.create_git_release(tag=TAG, name=TAG, message="Automated rootfs", draft=False, prerelease=False)
 
-    # Remove any existing asset with the same name
     for asset in release.get_assets():
         if asset.name == ASSET_NAME:
             asset.delete_asset()
