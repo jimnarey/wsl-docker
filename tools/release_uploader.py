@@ -15,8 +15,11 @@ import github
 REPO_ENV = "GITHUB_REPOSITORY"
 TOKEN_ENV = "GITHUB_TOKEN"
 TAG = "ubuntu-noble-amd64"
-ASSET_NAME = "ubuntu-noble-amd64.tar.gz"
-ASSET_PATH = Path(ASSET_NAME)
+# Upload both the rootfs tarball and the preformatted VHDX for /home
+ASSETS = [
+    ("ubuntu-noble-amd64.tar.gz", "application/gzip"),
+    ("home.vhdx", "application/octet-stream"),
+]
 
 
 def main() -> int:
@@ -26,9 +29,10 @@ def main() -> int:
         print(f"Environment variables {REPO_ENV} and {TOKEN_ENV} must be set", file=sys.stderr)
         return 2
 
-    if not ASSET_PATH.exists():
-        print(f"Asset not found: {ASSET_PATH}", file=sys.stderr)
-        return 3
+    for name, _ in ASSETS:
+        if not Path(name).exists():
+            print(f"Asset not found: {name}", file=sys.stderr)
+            return 3
 
     gh = github.Github(auth=github.Auth.Token(token))
     repo = gh.get_repo(repo_name)
@@ -42,15 +46,16 @@ def main() -> int:
     if release is None:
         release = repo.create_git_release(tag=TAG, name=TAG, message="Automated rootfs", draft=False, prerelease=False)
 
-    for asset in release.get_assets():
-        if asset.name == ASSET_NAME:
-            asset.delete_asset()
-
-    uploaded = release.upload_asset(str(ASSET_PATH), name=ASSET_NAME, label=ASSET_NAME, content_type="application/gzip")
-    try:
-        print(uploaded.browser_download_url)
-    except Exception:
-        print("Upload complete")
+    # Remove any existing assets with the same names, then upload each
+    existing = {a.name: a for a in release.get_assets()}
+    for name, content_type in ASSETS:
+        if name in existing:
+            existing[name].delete_asset()
+        uploaded = release.upload_asset(name, name=name, label=name, content_type=content_type)
+        try:
+            print(uploaded.browser_download_url)
+        except Exception:
+            print(f"Uploaded: {name}")
 
     return 0
 

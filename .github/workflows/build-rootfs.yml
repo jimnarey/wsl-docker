@@ -19,7 +19,7 @@ jobs:
       - name: Install build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y debootstrap gzip python3-venv python3-pip
+          sudo apt-get install -y debootstrap gzip python3-venv python3-pip qemu-utils parted kpartx e2fsprogs util-linux
 
       - name: Build Ubuntu 24.04 (noble) rootfs
         run: |
@@ -46,9 +46,37 @@ jobs:
           sudo umount "$ROOTFS_DIR"/sys || true
           sudo umount "$ROOTFS_DIR"/dev || true
 
+          # Create a preformatted VHDX for /home and inject PARTUUID into rootfs fstab
+          echo "Creating preformatted VHDX for /home"
+          WORKDIR=$(mktemp -d)
+          cd "$WORKDIR"
+          # Create sparse raw image (adjust size as desired)
+          fallocate -l 64M home.raw
+          # Create GPT and single partition
+          sudo parted -s home.raw mklabel gpt
+          sudo parted -s home.raw mkpart primary 1MiB 100%
+          # Map loop device and partition
+          LOOP=$(sudo losetup --partscan --find --show home.raw)
+          PART="${LOOP}p1"
+          # Format partition as ext4
+          sudo mkfs.ext4 -F "$PART"
+          # Read PARTUUID for fstab
+          PARTUUID=$(sudo blkid -s PARTUUID -o value "$PART")
+          echo "Created partition with PARTUUID=$PARTUUID"
+          # Ensure /etc/fstab exists and append fstab entry for /home using PARTUUID
+          sudo mkdir -p "$ROOTFS_DIR/home"
+          echo "PARTUUID=$PARTUUID /home ext4 defaults 0 2" | sudo tee -a "$ROOTFS_DIR/etc/fstab"
+          # Detach loop and convert to VHDX
+          sudo losetup -d "$LOOP"
+          qemu-img convert -f raw -O vhdx home.raw home.vhdx
+          mv home.vhdx "$GITHUB_WORKSPACE"/
+          cd -
+          rm -rf "$WORKDIR"
+
           # Create tarball
           sudo tar -C "$ROOTFS_DIR" -c . | gzip -9 > ubuntu-noble-amd64.tar.gz
           ls -lh ubuntu-noble-amd64.tar.gz
+          ls -lh home.vhdx || true
 
       - name: Install Python deps
         run: |
