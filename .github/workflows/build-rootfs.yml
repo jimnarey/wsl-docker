@@ -27,6 +27,26 @@ jobs:
           ROOTFS_DIR=$(mktemp -d)
           echo "Building into $ROOTFS_DIR"
           sudo debootstrap --variant=minbase --arch=amd64 noble "$ROOTFS_DIR" http://archive.ubuntu.com/ubuntu/
+
+          # Copy the chroot provisioner into the rootfs
+          sudo mkdir -p "$ROOTFS_DIR"/tmp
+          sudo cp provision/chroot-provision.sh "$ROOTFS_DIR"/tmp/chroot-provision.sh
+          sudo chmod +x "$ROOTFS_DIR"/tmp/chroot-provision.sh
+
+          # Bind mount kernel filesystems for chroot
+          sudo mount --bind /proc "$ROOTFS_DIR"/proc
+          sudo mount --bind /sys "$ROOTFS_DIR"/sys
+          sudo mount --bind /dev "$ROOTFS_DIR"/dev
+
+          # Run provisioner inside chroot
+          sudo chroot "$ROOTFS_DIR" /bin/bash /tmp/chroot-provision.sh
+
+          # Unmount binds
+          sudo umount "$ROOTFS_DIR"/proc || true
+          sudo umount "$ROOTFS_DIR"/sys || true
+          sudo umount "$ROOTFS_DIR"/dev || true
+
+          # Create tarball
           sudo tar -C "$ROOTFS_DIR" -c . | gzip -9 > ubuntu-noble-amd64.tar.gz
           ls -lh ubuntu-noble-amd64.tar.gz
 
