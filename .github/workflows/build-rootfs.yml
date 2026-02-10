@@ -1,0 +1,43 @@
+name: Build Ubuntu 24.04 (noble) rootfs
+
+on:
+  workflow_dispatch: {}
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  build-rootfs:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y debootstrap gzip python3-venv python3-pip
+
+      - name: Build Ubuntu 24.04 (noble) rootfs
+        run: |
+          set -euo pipefail
+          ROOTFS_DIR=$(mktemp -d)
+          echo "Building into $ROOTFS_DIR"
+          sudo debootstrap --variant=minbase --arch=amd64 noble "$ROOTFS_DIR" http://archive.ubuntu.com/ubuntu/
+          sudo tar -C "$ROOTFS_DIR" -c . | gzip -9 > ubuntu-noble-amd64.tar.gz
+          ls -lh ubuntu-noble-amd64.tar.gz
+
+      - name: Install Python deps
+        run: |
+          python3 -m pip install --upgrade pip
+          python3 -m pip install -r requirements.txt
+
+      - name: Upload release asset using Python tool
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          python3 tools/release_uploader.py
