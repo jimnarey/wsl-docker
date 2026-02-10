@@ -78,7 +78,23 @@ New-Item -ItemType Directory -Path $installDir -Force | Out-Null
 try {
     & wsl.exe --import $DistroName $installDir $tarPath --version 2
 } catch {
-    Abort "wsl --import failed: $_" 4
+    $err = $_
+    $errMsg = if ($err.Exception) { $err.Exception.Message } else { $err.ToString() }
+
+    if ($errMsg -match 'HCS_E_SERVICE_NOT_AVAILABLE' -or $errMsg -match 'required feature is not installed' -or $errMsg -match 'Wsl/Service/RegisterDistro/CreateVm') {
+        Write-Error "wsl --import failed because the virtualization host service appears unavailable. This commonly happens when VirtualMachinePlatform or Hyper-V was enabled but the machine hasn't been rebooted."
+        Write-Host "Recommended action: reboot the machine to finish installing VirtualMachinePlatform/WSL components, then re-run this script."
+
+        $resp = Read-Host "Would you like to reboot now? (Y/N)"
+        if ($resp -match '^[Yy]') {
+            Write-Host "Rebooting now..."
+            shutdown /r /t 5
+        }
+
+        Abort "wsl --import failed: $errMsg"
+    }
+
+    Abort "wsl --import failed: $errMsg"
 }
 
 Write-Host "Import complete. Now enumerating GPT disks with a single Linux partition..."
