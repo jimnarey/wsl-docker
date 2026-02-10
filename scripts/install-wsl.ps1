@@ -22,9 +22,9 @@ $DownloadUrl = 'https://github.com/jimnarey/wsl-docker/releases/download/ubuntu-
 $DistroName = 'ubuntu-noble'
 $AssetFileName = 'ubuntu-noble-amd64.tar.gz'
 
-function Abort([string]$msg, [int]$code=1) {
+function Abort([string]$msg) {
     Write-Error $msg
-    exit $code
+    throw $msg
 }
 
 ## Check we have admin privileges
@@ -46,7 +46,7 @@ if (-not $wslCmd) {
     try {
         & wsl.exe --install
         Write-Host "Invoked 'wsl --install'. A reboot may be required; re-run this script after reboot if necessary."
-        exit 0
+        return
     } catch {
         Abort "wsl --install failed or is not available on this system: $_" 2
     }
@@ -118,4 +118,4 @@ if ($candidates.Count -eq 0) {
 
 Write-Host "Temporary files kept at: $tmp (remove when no longer needed)"
 
-exit 0
+return
