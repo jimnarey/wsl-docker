@@ -64,7 +64,20 @@ $tarPath = Join-Path $tmp $AssetFileName
 
 Write-Host "Downloading rootfs from: $DownloadUrl"
 try {
-    Invoke-WebRequest -Uri $DownloadUrl -OutFile $tarPath -UseBasicParsing -ErrorAction Stop
+    if (Get-Command curl.exe -ErrorAction SilentlyContinue) {
+        Write-Host "Using curl.exe for download (resume + retries)."
+        $curl = (Get-Command curl.exe).Source
+        $curlArgs = @('-L', '--retry', '5', '--retry-delay', '2', '--retry-max-time', '120', '--progress-bar', '-C', '-', '--fail', '-o', "$tarPath", "$DownloadUrl")
+        & $curl @curlArgs
+    }
+    elseif (Get-Command Start-BitsTransfer -ErrorAction SilentlyContinue) {
+        Write-Host "Using Start-BitsTransfer for download."
+        Start-BitsTransfer -Source $DownloadUrl -Destination $tarPath -Priority Normal -RetryInterval 60 -RetryTimeout 3600
+    }
+    else {
+        Write-Host "Falling back to Invoke-WebRequest."
+        Invoke-WebRequest -Uri $DownloadUrl -OutFile $tarPath -UseBasicParsing -ErrorAction Stop
+    }
 } catch {
     Abort "Download failed: $_" 3
 }
