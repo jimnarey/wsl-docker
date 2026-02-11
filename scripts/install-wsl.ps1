@@ -62,27 +62,53 @@ $tmp = Join-Path $env:TEMP ('wsl_install_' + (Get-Date -Format yyyyMMddHHmmss))
 New-Item -Path $tmp -ItemType Directory -Force | Out-Null
 $tarPath = Join-Path $tmp $AssetFileName
 
-Write-Host "Downloading rootfs from: $DownloadUrl"
-try {
-    if (Get-Command curl.exe -ErrorAction SilentlyContinue) {
-        Write-Host "Using curl.exe for download (resume + retries)."
-        $curl = (Get-Command curl.exe).Source
-        $curlArgs = @('-L', '--retry', '5', '--retry-delay', '2', '--retry-max-time', '120', '--progress-bar', '-C', '-', '--fail', '-o', "$tarPath", "$DownloadUrl")
-        & $curl @curlArgs
+function Download-File {
+    param(
+        [Parameter(Mandatory=$true)][string]$Url,
+        [Parameter(Mandatory=$true)][string]$OutPath
+    )
+
+    Write-Host "Downloading: $Url -> $OutPath"
+    try {
+        if (Get-Command curl.exe -ErrorAction SilentlyContinue) {
+            Write-Host "Using curl.exe for download (resume + retries)."
+            $curl = (Get-Command curl.exe).Source
+            $curlArgs = @('-L', '--retry', '5', '--retry-delay', '2', '--retry-max-time', '120', '--progress-bar', '-C', '-', '--fail', '-o', "$OutPath", "$Url")
+            & $curl @curlArgs
+        }
+        elseif (Get-Command Start-BitsTransfer -ErrorAction SilentlyContinue) {
+            Write-Host "Using Start-BitsTransfer for download."
+            Start-BitsTransfer -Source $Url -Destination $OutPath -Priority Normal -RetryInterval 60 -RetryTimeout 3600
+        }
+        else {
+            Write-Host "Falling back to Invoke-WebRequest."
+            Invoke-WebRequest -Uri $Url -OutFile $OutPath -UseBasicParsing -ErrorAction Stop
+        }
+    } catch {
+        Abort "Download failed: $_" 3
     }
-    elseif (Get-Command Start-BitsTransfer -ErrorAction SilentlyContinue) {
-        Write-Host "Using Start-BitsTransfer for download."
-        Start-BitsTransfer -Source $DownloadUrl -Destination $tarPath -Priority Normal -RetryInterval 60 -RetryTimeout 3600
-    }
-    else {
-        Write-Host "Falling back to Invoke-WebRequest."
-        Invoke-WebRequest -Uri $DownloadUrl -OutFile $tarPath -UseBasicParsing -ErrorAction Stop
-    }
-} catch {
-    Abort "Download failed: $_" 3
+    Write-Host "Downloaded: $OutPath"
 }
 
-Write-Host "Downloaded to $tarPath"
+# Determine vhd URL from release base
+$baseUrl = $DownloadUrl.Substring(0, $DownloadUrl.LastIndexOf('/') + 1)
+$vhdUrl = "$baseUrl/home.vhdx"
+
+Write-Host "Downloading rootfs tarball and VHDX from release"
+Download-File -Url $DownloadUrl -OutPath $tarPath
+
+# Store the home VHDX in a stable location under the user's Windows home directory
+$storeDir = Join-Path $env:USERPROFILE ("wsl-docker\$DistroName")
+if (-not (Test-Path $storeDir)) { New-Item -Path $storeDir -ItemType Directory -Force | Out-Null }
+$vhdPath = Join-Path $storeDir 'home.vhdx'
+Write-Host "Storing VHDX at: $vhdPath"
+Download-File -Url $vhdUrl -OutPath $vhdPath
+
+# Also keep the bootstrap script in the store directory for post-install use
+$bootstrapUrl = 'https://raw.githubusercontent.com/jimnarey/wsl-docker/main/provision/bootstrap.sh'
+$bootstrapPath = Join-Path $storeDir 'bootstrap.sh'
+Write-Host "Downloading bootstrap script to: $bootstrapPath"
+Download-File -Url $bootstrapUrl -OutPath $bootstrapPath
 
 $installDir = Join-Path $env:LOCALAPPDATA ("wsl\$DistroName")
 Write-Host "Importing distro as '$DistroName' into: $installDir"
@@ -111,6 +137,20 @@ try {
 }
 
 Write-Host "Import complete. Now enumerating GPT disks with a single Linux partition..."
+
+# Attach the preformatted home VHDX so that /etc/fstab inside the distro can mount it
+if (Test-Path $vhdPath) {
+    Write-Host "Attaching VHDX to WSL: $vhdPath"
+    try {
+        & wsl.exe --mount --vhd $vhdPath
+        Write-Host "VHDX attached. Triggering mount inside distro to honor /etc/fstab"
+        & wsl.exe -d $DistroName -- bash -lc "sleep 1; mount -a || true"
+    } catch {
+        Write-Warning "Failed to attach or mount VHDX inside WSL: $_"
+    }
+} else {
+    Write-Warning "Expected VHDX not found at $vhdPath; skipping attach"
+}
 
 $linuxGpt = '0fc63daf-8483-4772-8e79-3d69d8477de4'
 
@@ -145,6 +185,14 @@ if ($candidates.Count -eq 0) {
     foreach ($c in $candidates) { Write-Host $c.SuggestedMountCommand }
 }
 
-Write-Host "Temporary files kept at: $tmp (remove when no longer needed)"
+Write-Host "Cleaning up temporary files..."
+try {
+    if (Test-Path $tarPath) { Remove-Item -Path $tarPath -Force -ErrorAction SilentlyContinue }
+    if (Test-Path $tmp) { Remove-Item -Path $tmp -Recurse -Force -ErrorAction SilentlyContinue }
+} catch {
+    Write-Warning "Failed to remove some temporary files: $_"
+}
+
+Write-Host "Temporary files removed. Persistent files kept in: $storeDir"
 
 return
