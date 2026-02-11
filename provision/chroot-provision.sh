@@ -32,8 +32,6 @@ echo "deb [arch=$ARCH signed-by=/etc/apt/keyrings/docker.gpg] https://download.d
 apt-get update
 echo "Installing docker packages..."
 apt-get install -y --no-install-recommends docker-ce docker-ce-cli containerd.io
-
-#### Install NVIDIA Container Toolkit (follow NVIDIA official guide)
 echo "Adding NVIDIA package repositories and GPG key (official method)"
 curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | apt-key add -
 
@@ -42,6 +40,9 @@ OS_ID=$(. /etc/os-release; echo "$ID")
 VER=$(. /etc/os-release; echo "$VERSION_ID")
 echo "Detected OS: $OS_ID $VER"
 
+#
+# Why is this needed? We know what version we're using.
+#
 declare -a CANDIDATES
 CANDIDATES+=("${OS_ID}${VER}")
 # Common fallbacks for newer Ubuntu releases that may not yet be published
@@ -69,11 +70,10 @@ apt-get update
 echo "Installing nvidia-container-toolkit (official package)..."
 apt-get install -y --no-install-recommends nvidia-container-toolkit
 
-# Configure the runtime integration (best-effort inside chroot). This writes config
-# files but does not attempt to restart services (chroot prevents service control).
+# Configure the runtime integration This writes config files but does not 
+# attempt to restart services (chroot prevents service control).
 if command -v nvidia-ctk >/dev/null 2>&1; then
     echo "Configuring NVIDIA container runtime (nvidia-ctk)"
-    # Configure for Docker runtime; --silent to avoid interactive prompts if supported
     nvidia-ctk runtime configure --runtime=docker || true
 fi
 
