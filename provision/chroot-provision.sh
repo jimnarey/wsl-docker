@@ -12,7 +12,7 @@ apt-get install -y --no-install-recommends ca-certificates curl gnupg lsb-releas
   software-properties-common
 
 echo "Installing basic tools..."
-apt-get install -y --no-install-recommends git build-essential
+apt-get install -y --no-install-recommends git build-essential nano emacs
 
 # Prevent services from being started during package installation
 cat >/usr/sbin/policy-rc.d <<'EOF'
