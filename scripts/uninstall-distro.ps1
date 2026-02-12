@@ -15,7 +15,7 @@ USAGE
 #>
 
 param(
-    [string]$DistroName = 'ubuntu-noble',
+    [string]$DistroName = 'container-host-noble',
     [switch]$Force
 )
 
@@ -27,7 +27,7 @@ if (-not (Is-Administrator)) {
     Write-Error "This script must be run as Administrator. Relaunch in an elevated PowerShell."; return
 }
 
-$storeDir = Join-Path $env:USERPROFILE ("wsl-docker\$DistroName")
+$storeDir = Join-Path $env:USERPROFILE ("$DistroName")
 $installDir = Join-Path $env:LOCALAPPDATA ("wsl\$DistroName")
 $vhdPath = Join-Path $storeDir 'home.vhdx'
 
