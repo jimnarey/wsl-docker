@@ -1,3 +1,4 @@
+```powershell
 <#
 .SYNOPSIS
   Unregister and remove a WSL distribution created by install-wsl.ps1
@@ -24,7 +25,7 @@ function Is-Administrator {
 }
 
 if (-not (Is-Administrator)) {
-    Write-Error "This script must be run as Administrator. Relaunch in an elevated PowerShell."; exit 2
+    Write-Error "This script must be run as Administrator. Relaunch in an elevated PowerShell."; return
 }
 
 $storeDir = Join-Path $env:USERPROFILE ("wsl-docker\$DistroName")
@@ -78,5 +79,5 @@ if (Test-Path $installDir) {
     }
 } else { Write-Host "Install directory not found: $installDir" }
 
-Write-Host "Uninstall completed. If any resources remain attached, consider running 'wsl --shutdown' and retrying.";
-exit 0
+Write-Host "Uninstall completed. If any resources remain attached, consider running 'wsl --shutdown' and retrying";
+return
