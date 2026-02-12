@@ -59,18 +59,6 @@ else
   done
 fi
 
-# Optional: clone a repository containing Dockerfiles/compose
-if [ -n "$REPO_URL" ]; then
-  echo "REPO_URL provided; cloning to $REPO_DEST"
-  mkdir -p "$(dirname "$REPO_DEST")"
-  if [ ! -d "$REPO_DEST/.git" ]; then
-    git clone "$REPO_URL" "$REPO_DEST" || echo "git clone failed"
-    chown -R "$NEW_USER":"$NEW_USER" "$REPO_DEST" || true
-  else
-    echo "Repository already present at $REPO_DEST; pulling latest"
-    (cd "$REPO_DEST" && git pull) || true
-  fi
-fi
 
 echo "Bootstrap finished"
 exit 0
