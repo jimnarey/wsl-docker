@@ -1,4 +1,3 @@
-```powershell
 <#
 .SYNOPSIS
   Unregister and remove a WSL distribution created by install-wsl.ps1
