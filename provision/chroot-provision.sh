@@ -12,7 +12,7 @@ apt-get install -y --no-install-recommends ca-certificates curl gnupg lsb-releas
   software-properties-common
 
 echo "Installing basic tools and system packages needed for systemd..."
-apt-get install -y --no-install-recommends git build-essential nano emacs locales dbus systemd-sysv libpam-modules libpam-runtime
+apt-get install -y --no-install-recommends git build-essential nano emacsen-common locales dbus systemd-sysv libpam-modules libpam-runtime
 
 # Prevent services from being started during package installation
 cat >/usr/sbin/policy-rc.d <<'EOF'
