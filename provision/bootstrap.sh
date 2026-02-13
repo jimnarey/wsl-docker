@@ -6,7 +6,7 @@ set -euo pipefail
 # configuration. Intended to be run as root (the PowerShell installer runs this via
 # `wsl -d <distro> -- bash /bootstrap.sh`).
 
-NEW_USER=${NEW_USER:-developer}
+NEW_USER=${NEW_USER:-ubuntu}
 REPO_URL=${REPO_URL:-}
 REPO_DEST=${REPO_DEST:-/home/${NEW_USER}/app}
 
@@ -17,11 +17,8 @@ if [ "$(id -u)" -ne 0 ]; then
   exit 2
 fi
 
-# Create non-root user if requested and not exists
-if ! id -u "$NEW_USER" >/dev/null 2>&1; then
-  echo "Creating user $NEW_USER"
-  adduser --disabled-password --gecos "" "$NEW_USER" || true
-fi
+# User creation is performed during image build (chroot); this script
+# assumes the user already exists in the image and only ensures group membership below.
 
 # Ensure user is in docker group
 if command -v groupadd >/dev/null 2>&1; then

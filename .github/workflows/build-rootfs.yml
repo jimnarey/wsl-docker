@@ -53,6 +53,12 @@ jobs:
           # Generate a machine-id for systemd services
           sudo mkdir -p "$ROOTFS_DIR/etc"
           sudo sh -c 'cat /proc/sys/kernel/random/uuid > "$ROOTFS_DIR/etc/machine-id"'
+          sudo chmod 0644 "$ROOTFS_DIR/etc/machine-id" || true
+          sudo chown root:root "$ROOTFS_DIR/etc/machine-id" || true
+          # Ensure a basic locale file exists for PAM/env
+          sudo sh -c 'echo "LANG=C.UTF-8" > "$ROOTFS_DIR/etc/default/locale"'
+          sudo chmod 0644 "$ROOTFS_DIR/etc/default/locale" || true
+          sudo chown root:root "$ROOTFS_DIR/etc/default/locale" || true
           # Prepare persistent journal directory (optional but helpful)
           sudo mkdir -p "$ROOTFS_DIR/var/log/journal"
           sudo chmod 0755 "$ROOTFS_DIR/var/log/journal"
@@ -85,6 +91,8 @@ jobs:
           rm -rf "$WORKDIR"
 
           # Create tarball
+          # Ensure top-level root inode is owned by root to avoid systemd unsafe path checks
+          sudo chown root:root "$ROOTFS_DIR"
           sudo tar -C "$ROOTFS_DIR" -c . | gzip -9 > ubuntu-noble-amd64.tar.gz
           ls -lh ubuntu-noble-amd64.tar.gz
           ls -lh home.vhdx || true

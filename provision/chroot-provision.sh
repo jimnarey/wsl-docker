@@ -11,8 +11,8 @@ apt-get update
 apt-get install -y --no-install-recommends ca-certificates curl gnupg lsb-release apt-transport-https \
   software-properties-common
 
-echo "Installing basic tools..."
-apt-get install -y --no-install-recommends git build-essential nano emacsen-common
+echo "Installing basic tools and system packages needed for systemd..."
+apt-get install -y --no-install-recommends git build-essential nano emacs locales dbus systemd-sysv libpam-modules libpam-runtime
 
 # Prevent services from being started during package installation
 cat >/usr/sbin/policy-rc.d <<'EOF'
@@ -82,5 +82,18 @@ rm -rf /var/lib/apt/lists/*
 
 # Remove policy stub
 rm -f /usr/sbin/policy-rc.d
+
+## Create a default non-root user 'ubuntu' with UID 1000 for consistency
+if ! id -u ubuntu >/dev/null 2>&1; then
+  echo "Creating user ubuntu (uid 1000)"
+  adduser --uid 1000 --disabled-password --gecos "" ubuntu || true
+  mkdir -p /home/ubuntu
+  chown ubuntu:ubuntu /home/ubuntu || true
+fi
+
+## Ensure a basic locale file exists for PAM/env
+if [ ! -f /etc/default/locale ]; then
+  echo 'LANG=C.UTF-8' > /etc/default/locale
+fi
 
 echo "Chroot provisioning finished."
