@@ -46,22 +46,10 @@ jobs:
           sudo umount "$ROOTFS_DIR"/sys || true
           sudo umount "$ROOTFS_DIR"/dev || true
 
-          # Prepare rootfs for systemd in WSL
-          echo "Configuring rootfs for systemd support (WSL)..."
-          # Enable systemd when the distro is launched under WSL
-          echo -e "[boot]\nsystemd=true" | sudo tee "$ROOTFS_DIR/etc/wsl.conf" > /dev/null
-          # Generate a machine-id for systemd services
-          sudo mkdir -p "$ROOTFS_DIR/etc"
-          sudo sh -c 'cat /proc/sys/kernel/random/uuid > "$ROOTFS_DIR/etc/machine-id"'
-          sudo chmod 0644 "$ROOTFS_DIR/etc/machine-id" || true
-          sudo chown root:root "$ROOTFS_DIR/etc/machine-id" || true
           # Ensure a basic locale file exists for PAM/env
           sudo sh -c 'echo "LANG=C.UTF-8" > "$ROOTFS_DIR/etc/default/locale"'
           sudo chmod 0644 "$ROOTFS_DIR/etc/default/locale" || true
           sudo chown root:root "$ROOTFS_DIR/etc/default/locale" || true
-          # Prepare persistent journal directory (optional but helpful)
-          sudo mkdir -p "$ROOTFS_DIR/var/log/journal"
-          sudo chmod 0755 "$ROOTFS_DIR/var/log/journal"
 
           # Create a preformatted VHDX for /home and inject PARTUUID into rootfs fstab
           echo "Creating preformatted VHDX for /home"

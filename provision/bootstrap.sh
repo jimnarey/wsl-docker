@@ -37,25 +37,10 @@ if command -v nvidia-ctk >/dev/null 2>&1; then
   done
 fi
 
-# Restart container runtimes (systemd if available, otherwise service commands)
-SVCS="docker containerd"
-INIT_PID1=$(ps -p 1 -o comm= | tr -d '[:space:]') || INIT_PID1=""
-if [ "$INIT_PID1" = "systemd" ]; then
-  echo "Restarting services via systemctl: $SVCS"
-  for s in $SVCS; do
-    if systemctl list-unit-files | grep -q "^$s"; then
-      systemctl restart "$s" || true
-    fi
-  done
-else
-  echo "systemd not detected; attempting service restart"
-  for s in $SVCS; do
-    if command -v service >/dev/null 2>&1; then
-      service "$s" restart || true
-    fi
-  done
-fi
+# We intentionally do not use systemd in this image. Instead we ship a
+# supervisord configuration and a helper `/usr/local/bin/start-services`
+# which will start containerd, dockerd and sshd, and can optionally run
+# `docker compose` commands passed as arguments.
 
-
-echo "Bootstrap finished"
+echo "Bootstrap finished. To start services run: /usr/local/bin/start-services [compose-args]"
 exit 0

@@ -11,8 +11,11 @@ apt-get update
 apt-get install -y --no-install-recommends ca-certificates curl gnupg lsb-release apt-transport-https \
   software-properties-common
 
-echo "Installing basic tools and system packages needed for systemd..."
-apt-get install -y --no-install-recommends git build-essential nano emacsen-common locales dbus systemd-sysv libpam-modules libpam-runtime
+echo "Installing basic tools and system packages..."
+apt-get install -y --no-install-recommends git build-essential nano emacsen-common locales libpam-modules libpam-runtime
+
+# Install supervisor, ssh server and docker compose plugin (we'll avoid systemd)
+apt-get install -y --no-install-recommends supervisor openssh-server
 
 # Prevent services from being started during package installation
 cat >/usr/sbin/policy-rc.d <<'EOF'
@@ -97,3 +100,63 @@ if [ ! -f /etc/default/locale ]; then
 fi
 
 echo "Chroot provisioning finished."
+
+## Configure supervisord to run containerd, dockerd and sshd
+cat > /etc/supervisor/conf.d/wsl-services.conf <<'EOF'
+[supervisord]
+logfile=/var/log/supervisord.log
+pidfile=/var/run/supervisord.pid
+
+[program:containerd]
+command=/usr/bin/containerd
+stdout_logfile=/var/log/containerd.log
+stderr_logfile=/var/log/containerd.err
+autorestart=true
+priority=10
+
+[program:dockerd]
+command=/usr/bin/dockerd --host unix:///run/docker.sock --containerd=/run/containerd/containerd.sock
+stdout_logfile=/var/log/dockerd.log
+stderr_logfile=/var/log/dockerd.err
+autorestart=true
+priority=20
+
+[program:sshd]
+command=/usr/sbin/sshd -D
+stdout_logfile=/var/log/sshd.log
+stderr_logfile=/var/log/sshd.err
+autorestart=true
+priority=30
+EOF
+
+# Ensure sshd keys and runtime dirs exist
+mkdir -p /var/run/sshd /var/log /run/containerd
+if [ ! -f /etc/ssh/ssh_host_rsa_key ]; then
+  dpkg-reconfigure openssh-server || true
+fi
+
+# Helper to start supervisord and optionally run docker compose commands
+cat > /usr/local/bin/start-services <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Start supervisord if not running
+if ! pgrep -x supervisord >/dev/null 2>&1; then
+  /usr/bin/supervisord -c /etc/supervisor/supervisord.conf || true
+  sleep 1
+fi
+
+# Wait for containerd and dockerd to appear
+for i in {1..10}; do
+  if [ -S /run/containerd/containerd.sock ] || [ -S /run/containerd/containerd.sock.ttrpc ]; then
+    break
+  fi
+  sleep 1
+done
+
+if [ "$#" -gt 0 ]; then
+  # Run docker compose commands passed as args (using docker CLI plugin)
+  docker compose "$@"
+fi
+EOF
+chmod +x /usr/local/bin/start-services
