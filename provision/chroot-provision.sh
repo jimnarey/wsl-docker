@@ -6,6 +6,25 @@ set -euo pipefail
 
 export DEBIAN_FRONTEND=noninteractive
 
+echo "Preparing apt sources and cache permissions..."
+# Ensure apt cache dirs exist and are writable by _apt to avoid sandbox warnings
+mkdir -p /var/cache/apt/archives/partial
+if id -u _apt >/dev/null 2>&1; then
+  chown -R _apt:root /var/cache/apt/archives || true
+  chmod 0755 /var/cache/apt/archives || true
+  chmod 0700 /var/cache/apt/archives/partial || true
+fi
+
+# Enable 'universe' component so packages like 'supervisor' are available
+if [ -f /etc/apt/sources.list ]; then
+  # Append 'universe' to Ubuntu archive lines if not present
+  sed -n '1,200p' /etc/apt/sources.list | sed -n '1,200p' >/dev/null 2>&1 || true
+  awk '/^deb /{if(index($0,"universe")==0) {print $0" universe"} else {print $0}} !/^deb /{print $0}' /etc/apt/sources.list > /etc/apt/sources.list.tmp || true
+  if [ -f /etc/apt/sources.list.tmp ]; then
+    mv /etc/apt/sources.list.tmp /etc/apt/sources.list
+  fi
+fi
+
 echo "Installing prerequisite packages..."
 apt-get update
 apt-get install -y --no-install-recommends ca-certificates curl gnupg lsb-release apt-transport-https \
