@@ -42,5 +42,6 @@ fi
 # which will start containerd, dockerd and sshd, and can optionally run
 # `docker compose` commands passed as arguments.
 
-echo "Bootstrap finished. To start services run: /usr/local/bin/start-services [compose-args]"
+echo "Bootstrap finished. Services will be started automatically when an interactive non-root shell is opened."
+echo "To start services manually run: /usr/local/bin/start-services [compose-args]"
 exit 0

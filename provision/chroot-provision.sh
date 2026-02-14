@@ -31,7 +31,7 @@ apt-get install -y --no-install-recommends ca-certificates curl gnupg lsb-releas
   software-properties-common
 
 echo "Installing basic tools and system packages..."
-apt-get install -y --no-install-recommends git build-essential nano emacsen-common locales libpam-modules libpam-runtime
+apt-get install -y --no-install-recommends git build-essential nano emacsen-common locales libpam-modules libpam-runtime sudo
 
 # Install supervisor, ssh server and docker compose plugin (we'll avoid systemd)
 apt-get install -y --no-install-recommends supervisor openssh-server
@@ -182,3 +182,38 @@ if [ "$#" -gt 0 ]; then
 fi
 EOF
 chmod +x /usr/local/bin/start-services
+
+## Set ubuntu user password and sudoers
+echo "ubuntu:ubuntu" | chpasswd || true
+# Allow ubuntu to run the start-services helper (and supervisord) without a password
+cat > /etc/sudoers.d/ubuntu <<'EOF'
+ubuntu ALL=(ALL) NOPASSWD: /usr/local/bin/start-services, /usr/bin/supervisord
+EOF
+chmod 0440 /etc/sudoers.d/ubuntu
+
+## Bake a default wsl.conf so the distro uses metadata and ubuntu as default user
+cat > /etc/wsl.conf <<'EOF'
+[automount]
+root = /mnt/
+options = metadata
+
+[user]
+default = ubuntu
+EOF
+
+## Add profile hook to auto-start supervisord when a regular interactive shell appears
+cat > /etc/profile.d/start-supervisord.sh <<'EOF'
+#!/usr/bin/env bash
+# Start supervisord automatically for interactive non-root shells
+case "$-" in
+  *i*) :;;
+  *) return;;
+esac
+if [ "$(id -u)" -ne 0 ]; then
+  if ! pgrep -x supervisord >/dev/null 2>&1; then
+    # start supervisord as root (passwordless sudo configured above)
+    sudo /usr/local/bin/start-services >/dev/null 2>&1 &
+  fi
+fi
+EOF
+chmod 0755 /etc/profile.d/start-supervisord.sh
