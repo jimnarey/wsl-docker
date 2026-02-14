@@ -118,6 +118,9 @@ if [ ! -f /etc/default/locale ]; then
   echo 'LANG=C.UTF-8' > /etc/default/locale
 fi
 
+# Ensure root directory is accessible to non-root users (fix accidental 0700 roots)
+chmod 0755 /
+
 echo "Chroot provisioning finished."
 
 ## Configure supervisord to run containerd, dockerd and sshd
