@@ -185,9 +185,14 @@ chmod +x /usr/local/bin/start-services
 
 ## Set ubuntu user password and sudoers
 echo "ubuntu:ubuntu" | chpasswd || true
-# Allow ubuntu to run the start-services helper (and supervisord) without a password
+# Allow ubuntu to run the start-services helper (and supervisord) without a password,
+# but require a password for other sudo actions (so the bootstrap script runs with
+# a password prompt).
 cat > /etc/sudoers.d/ubuntu <<'EOF'
+# Passwordless for specific service helpers
 ubuntu ALL=(ALL) NOPASSWD: /usr/local/bin/start-services, /usr/bin/supervisord
+# Allow passworded sudo for all other commands
+ubuntu ALL=(ALL) ALL
 EOF
 chmod 0440 /etc/sudoers.d/ubuntu
 
