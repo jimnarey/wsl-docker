@@ -2,7 +2,7 @@
 
 A pre-configured Ubuntu Noble distribution for Windows Subsystem for Linux 2 (WSL 2), designed to enable running Docker containers with as close-to a native Ubuntu experience as possible.
 
-This has been tested only on Windows 11. It may or may not work on Windows 10.
+It requires Windows 11 and at least 22H2 (released 2022) to be accessible via ssh from a different machine.
 
 ## Installing WSL 2
 
@@ -11,6 +11,8 @@ WSL 2 is not installed on Windows 11 by default. The steps for installing it are
 ```powershell
 iwr -useb https://raw.githubusercontent.com/jimnarey/wsl-docker/main/scripts/install-wsl.ps1 | iex
 ```
+
+Amongst other actions this script sets the default WSL version to 2.
 
 ## Installing the distribution
 
@@ -41,14 +43,46 @@ To finalise setup of the distribution the `bootstrap.sh` script downloaded by th
 - After completion, services (containerd, dockerd, sshd) will start automatically when an interactive non-root shell is opened, or can be started manually with `/usr/local/bin/start-services`.
 
 ```powershell
-wsl -d container-host-noble -- bash /mnt/c/Users/%USERNAME%/container-host-noble/bootstrap.sh
+wsl -d container-host-noble -- sudo bash /mnt/c/Users/$env:USERNAME/container-host-noble/bootstrap.sh
 ```
+The default password for the ubuntu user is `ubuntu`.
 
 To run the script and clone a specified git repository:
 
 ```powershell
-wsl -d container-host-noble -- env REPO_URL=https://github.com/your/repo.git REPO_DEST=/home/ubuntu/destination bash /mnt/c/Users/%USERNAME%/container-host-noble/bootstrap.sh
+wsl -d container-host-noble -- env REPO_URL=https://github.com/your/repo.git REPO_DEST=/home/ubuntu/destination sudo bash /mnt/c/Users/$env:USERNAME/container-host-noble/bootstrap.sh
 ```
+
+### Accessing the distro via ssh
+
+Run the following commands prior to running the distro or later, while it is not running.
+
+```powershell
+wsl --port add --protocol tcp --hostport 2222 --guestport 22
+New-NetFirewallRule -DisplayName "WSL SSH" -Direction Inbound -LocalPort 2222 -Protocol TCP -Action Allow
+```
+
+## Running the distro
+
+After importing the rootfs (via the provided installer or `wsl --import`), you can start and interact with the distro like any WSL distribution.
+
+- Start an interactive shell in the distro:
+
+```powershell
+wsl -d container-host-noble
+```
+
+- Run a single command inside the distro:
+
+```powershell
+wsl -d container-host-noble -- ls -la
+```
+
+### Other useful commands
+
+- List all installed distros: `wsl --list --verbose`
+- List running distros: `wsl --list --running`
+
 
 ## Uninstalling the distribution
 
@@ -61,34 +95,3 @@ iwr -useb https://raw.githubusercontent.com/jimnarey/wsl-docker/main/scripts/uni
 This script unregisters the distro, attempts to unmount the VHDX, and deletes the stored files under your Windows user folder.
 
 The repo does not contain a script for uninstalling/deactivating WSL itself.
-
-## How to run the distro
-
-After importing the rootfs (via the provided installer or `wsl --import`), you can start and interact with the distro like any WSL distribution.
-
-- Start an interactive shell in the distro:
-
-```bash
-wsl -d <DistroName>
-# example: wsl -d wsl-docker
-```
-
-- Run a single command inside the distro:
-
-```bash
-wsl -d <DistroName> -- /bin/bash -lc "echo hello from distro"
-```
-
-- If you used the Windows installer script, you can also use the included helper to import/uninstall the distro:
-
-```powershell
-# Import (example - use the installer for a release tarball)
-./scripts/install-wsl.ps1 -DistroName wsl-docker -RootfsPath .\path\to\rootfs.tar
-
-# Uninstall
-./scripts/uninstall-wsl.ps1 -DistroName wsl-docker
-```
-
-Notes:
-- Replace `<DistroName>` with the name you used when importing the distro.
-- On Windows, run the PowerShell commands from an elevated PowerShell prompt when required.

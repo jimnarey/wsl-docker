@@ -33,7 +33,6 @@ apt-get install -y --no-install-recommends ca-certificates curl gnupg lsb-releas
 echo "Installing basic tools and system packages..."
 apt-get install -y --no-install-recommends git build-essential nano emacsen-common locales libpam-modules libpam-runtime sudo
 
-# Install supervisor, ssh server and docker compose plugin (we'll avoid systemd)
 apt-get install -y --no-install-recommends supervisor openssh-server
 
 # Prevent services from being started during package installation
@@ -43,7 +42,6 @@ exit 101
 EOF
 chmod +x /usr/sbin/policy-rc.d
 
-#### Install Docker CE
 echo "Adding Docker repository and GPG key..."
 mkdir -p /etc/apt/keyrings
 curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
@@ -105,7 +103,7 @@ rm -rf /var/lib/apt/lists/*
 # Remove policy stub
 rm -f /usr/sbin/policy-rc.d
 
-## Create a default non-root user 'ubuntu' with UID 1000 for consistency
+## Create a default non-root user 'ubuntu' with UID 1000
 if ! id -u ubuntu >/dev/null 2>&1; then
   echo "Creating user ubuntu (uid 1000)"
   adduser --uid 1000 --disabled-password --gecos "" ubuntu || true
@@ -128,6 +126,7 @@ cat > /etc/supervisor/conf.d/wsl-services.conf <<'EOF'
 [supervisord]
 logfile=/var/log/supervisord.log
 pidfile=/var/run/supervisord.pid
+user=root
 
 [program:containerd]
 command=/usr/bin/containerd
@@ -144,7 +143,7 @@ autorestart=true
 priority=20
 
 [program:sshd]
-command=/usr/sbin/sshd -D
+command=/bin/bash -c 'mkdir -p /run/sshd && chmod 755 /run/sshd && chown root:root /run/sshd && /usr/sbin/sshd -D'
 stdout_logfile=/var/log/sshd.log
 stderr_logfile=/var/log/sshd.err
 autorestart=true
@@ -196,7 +195,7 @@ ubuntu ALL=(ALL) ALL
 EOF
 chmod 0440 /etc/sudoers.d/ubuntu
 
-## Bake a default wsl.conf so the distro uses metadata and ubuntu as default user
+## Add a default wsl.conf so the distro uses metadata and ubuntu as default user
 cat > /etc/wsl.conf <<'EOF'
 [automount]
 root = /mnt/
@@ -204,6 +203,9 @@ options = metadata
 
 [user]
 default = ubuntu
+
+[network]
+generateResolvConf = false
 EOF
 
 ## Add profile hook to auto-start supervisord when a regular interactive shell appears
