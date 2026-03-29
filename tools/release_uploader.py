@@ -37,26 +37,65 @@ def main() -> int:
     gh = github.Github(auth=github.Auth.Token(token))
     repo = gh.get_repo(repo_name)
 
+    # Step 1: Delete existing release (if any)
     release = None
     for r in repo.get_releases():
         if r.tag_name == TAG:
             release = r
             break
-
-    if release is None:
-        release = repo.create_git_release(tag=TAG, name=TAG, message="Automated rootfs", draft=False, prerelease=False)
-
-    # Remove any existing assets with the same names, then upload each
-    existing = {a.name: a for a in release.get_assets()}
-    for name, content_type in ASSETS:
-        if name in existing:
-            existing[name].delete_asset()
-        uploaded = release.upload_asset(name, name=name, label=name, content_type=content_type)
+    if release:
+        print(f"Deleting existing release for tag {TAG}...")
         try:
-            print(uploaded.browser_download_url)
-        except Exception:
-            print(f"Uploaded: {name}")
+            release.delete_release()
+        except Exception as e:
+            print(f"Warning: failed to delete release: {e}")
 
+    # Step 2: Delete tag ref (if any)
+    ref = None
+    try:
+        ref = repo.get_git_ref(f"tags/{TAG}")
+        print(f"Deleting tag ref {TAG}...")
+        ref.delete()
+    except github.GithubException as e:
+        if e.status == 404:
+            print(f"Tag ref {TAG} not found (OK)")
+        else:
+            print(f"Warning: failed to delete tag ref: {e}")
+    except Exception as e:
+        print(f"Warning: failed to delete tag ref: {e}")
+
+    # Step 3: Get latest commit SHA on default branch
+    try:
+        default_branch = repo.default_branch
+        sha = repo.get_branch(default_branch).commit.sha
+        print(f"Using commit {sha} from branch {default_branch} for tag {TAG}")
+    except Exception as e:
+        print(f"Error: could not get latest commit SHA: {e}", file=sys.stderr)
+        return 4
+
+    # Step 4: Recreate tag
+    try:
+        repo.create_git_ref(ref=f"refs/tags/{TAG}", sha=sha)
+        print(f"Created tag {TAG} at {sha}")
+    except Exception as e:
+        print(f"Error: failed to create tag: {e}", file=sys.stderr)
+        return 5
+
+    # Step 5: Create new release
+    try:
+        release = repo.create_git_release(tag=TAG, name=TAG, message="Automated rootfs", draft=False, prerelease=False)
+        print(f"Created new release for tag {TAG}")
+    except Exception as e:
+        print(f"Error: failed to create release: {e}", file=sys.stderr)
+        return 6
+
+    # Step 6: Upload assets
+    for name, content_type in ASSETS:
+        try:
+            uploaded = release.upload_asset(name, name=name, label=name, content_type=content_type)
+            print(uploaded.browser_download_url)
+        except Exception as e:
+            print(f"Error uploading {name}: {e}", file=sys.stderr)
     return 0
 
 
