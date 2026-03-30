@@ -78,6 +78,14 @@ wsl -d container-host-noble
 wsl -d container-host-noble -- ls -la
 ```
 
+## Terminating the distro
+
+Typing `exit` at the Ubuntu command prompt just exits the command prompt. To terminate the running distro, run:
+
+```powershell
+wsl --terminate container-host-noble
+```
+
 ### Other useful commands
 
 - List all installed distros: `wsl --list --verbose`

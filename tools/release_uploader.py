@@ -15,10 +15,11 @@ import github
 REPO_ENV = "GITHUB_REPOSITORY"
 TOKEN_ENV = "GITHUB_TOKEN"
 TAG = "ubuntu-noble-amd64"
-# Upload both the rootfs tarball and the preformatted VHDX for /home
+# Upload the rootfs tarball, preformatted VHDX for /home, and bootstrap.sh
 ASSETS = [
     ("ubuntu-noble-amd64.tar.gz", "application/gzip"),
     ("home.vhdx", "application/octet-stream"),
+    ("provision/bootstrap.sh", "text/x-shellscript"),
 ]
 
 

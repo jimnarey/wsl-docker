@@ -9,9 +9,100 @@ USAGE
         .\install-wsl-distro.ps1
 #>
 
-$DownloadUrl = 'https://github.com/jimnarey/wsl-docker/releases/download/ubuntu-noble-amd64/ubuntu-noble-amd64.tar.gz'
+
+$ReleaseApiUrl = 'https://api.github.com/repos/jimnarey/wsl-docker/releases/tags/ubuntu-noble-amd64'
 $DistroName = 'container-host-noble'
 $AssetFileName = 'ubuntu-noble-amd64.tar.gz'
+$storeDir = Join-Path $env:USERPROFILE 'container-host-noble'
+$hashFile = Join-Path $storeDir 'asset-hashes.json'
+
+function Get-ReleaseAssets {
+    param([string]$ApiUrl)
+    $headers = @{ 'User-Agent' = 'wsl-distro-installer' }
+    $json = Invoke-RestMethod -Uri $ApiUrl -Headers $headers -UseBasicParsing
+    $assets = @{}
+    foreach ($a in $json.assets) {
+        $assets[$a.name] = @{ url = $a.browser_download_url; sha256 = $a.sha256; size = $a.size }
+    }
+    return $assets
+}
+
+function Get-RemoteHashes {
+    param([hashtable]$assets)
+    $hashes = @{}
+    foreach ($k in $assets.Keys) {
+        $sha = $assets[$k]['sha256']
+        if ($sha) { $hashes[$k] = $sha }
+    }
+    return $hashes
+}
+
+function Load-LocalHashes {
+    param([string]$Path)
+    if (Test-Path $Path) {
+        try { return Get-Content $Path | ConvertFrom-Json } catch { return @{} }
+    } else {
+        return @{}
+    }
+}
+
+function Save-LocalHashes {
+    param([string]$Path, $Hashes)
+    $Hashes | ConvertTo-Json | Set-Content $Path
+}
+
+function Get-FileHashHex {
+    param([string]$Path)
+    if (Test-Path $Path) {
+        return (Get-FileHash -Path $Path -Algorithm SHA256).Hash.ToLower()
+    } else {
+        return ''
+    }
+}
+
+function Download-If-Changed {
+    param(
+        [string]$Name,
+        [string]$Url,
+        [string]$Dest,
+        [string]$ExpectedHash,
+        [hashtable]$LocalHashes
+    )
+    $currentHash = Get-FileHashHex $Dest
+    $savedHash = if ($LocalHashes.ContainsKey($Name)) { $LocalHashes[$Name] } else { '' }
+    if ($currentHash -and $currentHash -eq $ExpectedHash -and $savedHash -eq $ExpectedHash) {
+        Write-Host "$Name is up to date. Skipping download."
+        return $false
+    }
+    Write-Host "Downloading $Name ..."
+    Invoke-WebRequest -Uri $Url -OutFile $Dest -UseBasicParsing -ErrorAction Stop
+    $newHash = Get-FileHashHex $Dest
+    if ($newHash -ne $ExpectedHash) {
+        Abort "$Name hash mismatch after download."
+    }
+    $LocalHashes[$Name] = $ExpectedHash
+    return $true
+}
+
+# Main logic
+if (-not (Test-Path $storeDir)) { New-Item -Path $storeDir -ItemType Directory -Force | Out-Null }
+$assets = Get-ReleaseAssets $ReleaseApiUrl
+$remoteHashes = Get-RemoteHashes $assets
+$localHashes = Load-LocalHashes $hashFile
+
+# Download and verify each asset
+$tarName = 'ubuntu-noble-amd64.tar.gz'
+$vhdxName = 'home.vhdx'
+$bootstrapName = 'bootstrap.sh'
+$tarPath = Join-Path $storeDir $tarName
+$vhdxPath = Join-Path $storeDir $vhdxName
+$bootstrapPath = Join-Path $storeDir $bootstrapName
+
+Download-If-Changed -Name $tarName -Url $assets[$tarName].url -Dest $tarPath -ExpectedHash $remoteHashes[$tarName] -LocalHashes $localHashes | Out-Null
+Download-If-Changed -Name $vhdxName -Url $assets[$vhdxName].url -Dest $vhdxPath -ExpectedHash $remoteHashes[$vhdxName] -LocalHashes $localHashes | Out-Null
+Download-If-Changed -Name $bootstrapName -Url $assets[$bootstrapName].url -Dest $bootstrapPath -ExpectedHash $remoteHashes[$bootstrapName] -LocalHashes $localHashes | Out-Null
+
+Save-LocalHashes -Path $hashFile -Hashes $localHashes
 
 function Abort([string]$msg) {
     Write-Error $msg
@@ -64,26 +155,6 @@ function Download-File {
     Write-Host "Downloaded: $OutPath"
 }
 
-# Determine vhd URL from release base
-$baseUrl = $DownloadUrl.Substring(0, $DownloadUrl.LastIndexOf('/') + 1)
-$vhdUrl = "$baseUrl/home.vhdx"
-
-Write-Host "Downloading rootfs tarball and VHDX from release"
-Download-File -Url $DownloadUrl -OutPath $tarPath
-
-# Store the home VHDX and bootstrap script in a single folder under the user's Windows home directory
-# Keep a flat structure: a single folder named 'container-host-noble' with no subdirectories
-$storeDir = Join-Path $env:USERPROFILE 'container-host-noble'
-if (-not (Test-Path $storeDir)) { New-Item -Path $storeDir -ItemType Directory -Force | Out-Null }
-$vhdPath = Join-Path $storeDir 'home.vhdx'
-Write-Host "Storing VHDX at: $vhdPath"
-Download-File -Url $vhdUrl -OutPath $vhdPath
-
-# Also keep the bootstrap script in the store directory for post-install use
-$bootstrapUrl = 'https://raw.githubusercontent.com/jimnarey/wsl-docker/main/provision/bootstrap.sh'
-$bootstrapPath = Join-Path $storeDir 'bootstrap.sh'
-Write-Host "Downloading bootstrap script to: $bootstrapPath"
-Download-File -Url $bootstrapUrl -OutPath $bootstrapPath
 
 $installDir = Join-Path $env:LOCALAPPDATA ("wsl\$DistroName")
 Write-Host "Importing distro as '$DistroName' into: $installDir"
@@ -114,17 +185,17 @@ try {
 Write-Host "Import complete. Now enumerating GPT disks with a single Linux partition..."
 
 # Attach the preformatted home VHDX so that /etc/fstab inside the distro can mount it
-if (Test-Path $vhdPath) {
-    Write-Host "Attaching VHDX to WSL: $vhdPath"
+if (Test-Path $vhdxPath) {
+    Write-Host "Attaching VHDX to WSL: $vhdxPath"
     try {
-        & wsl.exe --mount --vhd $vhdPath
+        & wsl.exe --mount --vhd $vhdxPath
         Write-Host "VHDX attached. Triggering mount inside distro to honor /etc/fstab"
         & wsl.exe -d $DistroName -- bash -lc "sleep 1; mount -a || true"
     } catch {
         Write-Warning "Failed to attach or mount VHDX inside WSL: $_"
     }
 } else {
-    Write-Warning "Expected VHDX not found at $vhdPath; skipping attach"
+    Write-Warning "Expected VHDX not found at $vhdxPath; skipping attach"
 }
 
 $linuxGpt = '0fc63daf-8483-4772-8e79-3d69d8477de4'
