@@ -17,8 +17,19 @@ if [ "$(id -u)" -ne 0 ]; then
   exit 2
 fi
 
-# User creation is performed during image build (chroot); this script
-# assumes the user already exists in the image and only ensures group membership below.
+
+# Ensure /home/$NEW_USER exists and is owned by the correct user (idempotent)
+if [ ! -d "/home/$NEW_USER" ]; then
+  mkdir -p "/home/$NEW_USER"
+  chown "$NEW_USER:$NEW_USER" "/home/$NEW_USER"
+else
+  # Fix ownership if needed
+  owner=$(stat -c '%U' "/home/$NEW_USER" 2>/dev/null || echo '')
+  group=$(stat -c '%G' "/home/$NEW_USER" 2>/dev/null || echo '')
+  if [ "$owner" != "$NEW_USER" ] || [ "$group" != "$NEW_USER" ]; then
+    chown "$NEW_USER:$NEW_USER" "/home/$NEW_USER"
+  fi
+fi
 
 # Ensure user is in docker group
 if command -v groupadd >/dev/null 2>&1; then
